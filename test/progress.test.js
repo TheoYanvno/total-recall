@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { load, save, recordReview, streak, stats, dayKey, emptyProgress } from '../src/lib/progress.js';
+import { load, save, recordReview, streak, stats, dayKey, emptyProgress, history } from '../src/lib/progress.js';
 
 function memory(initial) {
   const m = new Map(initial ? [['total-recall:v1', initial]] : []);
@@ -41,5 +41,26 @@ test('stats sort cards into new, learning and mature', () => {
   const cards = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
   const states = { b: { reps: 2, lapses: 0, interval: 6 }, c: { reps: 5, lapses: 0, interval: 40 } };
   const s = stats(cards, states, { [dayKey(noon)]: 7 }, noon);
-  assert.deepEqual(s, { fresh: 1, learning: 1, mature: 1, streak: 1, today: 7 });
+  assert.deepEqual(s, { fresh: 1, learning: 1, mature: 1, mastery: 50, streak: 1, today: 7, studied: 7, correct: 0 });
+});
+
+test('correct answers are counted for Hard, Good and Easy, not Again', () => {
+  const st = { reps: 1, interval: 1, ease: 2.5, due: noon + DAY, lapses: 0 };
+  let p = recordReview(emptyProgress(), 'a', st, noon, 'good');
+  p = recordReview(p, 'b', st, noon, 'again');
+  p = recordReview(p, 'c', st, noon, 'easy');
+  assert.equal(p.days[dayKey(noon)], 3);
+  assert.equal(p.correct[dayKey(noon)], 2);
+  const s = stats([{ id: 'a' }], p.states, p.days, noon, p.correct);
+  assert.equal(s.studied, 3);
+  assert.equal(s.correct, 2);
+});
+
+test('older saves without correct counts still load', () => {
+  const p = load(memory(JSON.stringify({ states: {}, days: { '2026-11-09': 2 } })));
+  assert.deepEqual(p.correct, {});
+});
+
+test('history lists reviews per day, oldest first', () => {
+  assert.deepEqual(history({ [dayKey(noon)]: 4, [dayKey(noon - 2 * DAY)]: 1 }, 4, noon), [0, 1, 0, 4]);
 });

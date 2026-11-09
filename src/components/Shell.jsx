@@ -44,7 +44,7 @@ export function Sidebar({ page, onPage }) {
       <ul>
         {PAGES.map(p => (
           <li key={p.id}>
-            <button className={page === p.id ? 'active' : ''} aria-current={page === p.id ? 'page' : undefined} onClick={() => onPage(p.id)}>
+            <button aria-label={p.label} className={page === p.id ? "active" : ""} aria-current={page === p.id ? 'page' : undefined} onClick={() => onPage(p.id)}>
               <Icon d={p.icon} /><span>{p.label}</span>
             </button>
           </li>

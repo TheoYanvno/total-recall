@@ -8,8 +8,10 @@ React flashcards for studying programming. Decks cover the terms you meet when l
 
 - **7 built-in decks, 60 cards:** setup and GitHub, HTML and CSS, JavaScript basics, React basics, Python, SQL, and servers and data. Many cards have a short code example on the back.
 - **Spaced repetition:** rate each card Again, Hard, Good or Easy. SM-2 style intervals and ease decide when it comes back. The study queue shows due cards first, then new ones.
-- **Keyboard-friendly study:** Space flips a card and keys 1–4 rate it. Tapping works too.
-- **Progress saved in the browser:** day streak, cards reviewed today, and how many cards are new, learning or known well. Bad saved data starts fresh instead of breaking the app.
+- **Study screen:** pick a deck, flip the card, rate it with colored Again/Hard/Good/Easy buttons, and go full screen. Space flips, keys 1–4 rate, F toggles full screen. Tapping works too.
+- **Study modes:** Flashcards (every due card), Quick Review (10 cards), Practice Test (up to 20 cards mixed from every deck) and Challenge (as many as you can in 2 minutes).
+- **Progress saved in the browser:** overall mastery, cards studied, correct answers, day streak, a 14-day chart, and mastery for each deck. Bad saved data starts fresh instead of breaking the app.
+- **Settings:** dark or light theme, new cards per session, and a reset.
 - **Share decks as JSON:** export any deck, import a deck file, and remove imported decks. Imports are checked field by field, trimmed to sensible sizes and given ids that can't clash with built-in cards.
 
 ## Run it

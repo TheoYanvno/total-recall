@@ -4,7 +4,8 @@
 const KEY = 'total-recall:v1';
 
 export function emptyProgress() {
-  return { states: {}, days: {} };          // days: { 'YYYY-MM-DD': cards reviewed that day }
+  // days: { 'YYYY-MM-DD': cards reviewed that day }; correct: the same, counting only Hard, Good or Easy
+  return { states: {}, days: {}, correct: {} };
 }
 
 export function load(storage = globalThis.localStorage) {
@@ -15,14 +16,18 @@ export function load(storage = globalThis.localStorage) {
     for (const [id, s] of Object.entries(data.states || {})) {
       if (s && Number.isFinite(s.due) && Number.isFinite(s.interval) && Number.isFinite(s.ease)) states[id] = s;
     }
-    const days = {};
-    for (const [day, n] of Object.entries(data.days || {})) {
-      if (/^\d{4}-\d{2}-\d{2}$/.test(day) && Number.isInteger(n) && n > 0) days[day] = n;
-    }
-    return { states, days };
+    return { states, days: dayCounts(data.days), correct: dayCounts(data.correct) };
   } catch {
     return emptyProgress();
   }
+}
+
+function dayCounts(raw) {
+  const out = {};
+  for (const [day, n] of Object.entries(raw && typeof raw === 'object' ? raw : {})) {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(day) && Number.isInteger(n) && n > 0) out[day] = n;
+  }
+  return out;
 }
 
 export function save(progress, storage = globalThis.localStorage) {
@@ -39,12 +44,27 @@ export function dayKey(ms = Date.now()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-export function recordReview(progress, cardId, state, now = Date.now()) {
+// grade is optional: when it's anything but 'again', the review also counts as a correct answer.
+export function recordReview(progress, cardId, state, now = Date.now(), grade) {
   const day = dayKey(now);
+  const correct = { ...(progress.correct || {}) };
+  if (grade && grade !== 'again') correct[day] = (correct[day] || 0) + 1;
   return {
     states: { ...progress.states, [cardId]: state },
     days: { ...progress.days, [day]: (progress.days[day] || 0) + 1 },
+    correct,
   };
+}
+
+function total(counts = {}) {
+  return Object.values(counts).reduce((a, b) => a + b, 0);
+}
+
+// Reviews per day for the last n days, oldest first (for the progress chart).
+export function history(days, n = 14, now = Date.now()) {
+  const out = [];
+  for (let i = n - 1; i >= 0; i--) out.push(days[dayKey(now - i * 86400000)] || 0);
+  return out;
 }
 
 // Days in a row with at least one review, counting back from today (or from yesterday, so a streak
@@ -61,7 +81,7 @@ export function streak(days, now = Date.now()) {
 }
 
 // Cards by how well they're known: new (never reviewed), learning (interval under 21 days), mature.
-export function stats(cards, states, days, now = Date.now()) {
+export function stats(cards, states, days, now = Date.now(), correct = {}) {
   let fresh = 0, learning = 0, mature = 0;
   for (const c of cards) {
     const s = states[c.id];
@@ -69,5 +89,11 @@ export function stats(cards, states, days, now = Date.now()) {
     else if (s.interval >= 21) mature++;
     else learning++;
   }
-  return { fresh, learning, mature, streak: streak(days, now), today: days[dayKey(now)] || 0 };
+  // Mastery: known-well cards count fully and learning cards count half, out of every card.
+  const mastery = cards.length ? Math.round(((mature + learning / 2) / cards.length) * 100) : 0;
+  return {
+    fresh, learning, mature, mastery,
+    streak: streak(days, now), today: days[dayKey(now)] || 0,
+    studied: total(days), correct: total(correct),
+  };
 }
