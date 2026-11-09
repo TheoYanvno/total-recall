@@ -1,12 +1,15 @@
-import { useState } from 'react';
-import { DECKS, findDeck } from './lib/decks.js';
+import { useEffect, useState } from 'react';
+import { DECKS, findDeck, allCards } from './lib/decks.js';
+import { load, save, recordReview, stats } from './lib/progress.js';
 import { review, dueQueue, dueLabel } from './lib/srs.js';
 import Study from './components/Study.jsx';
 
 export default function App() {
   const [openId, setOpenId] = useState(null);
   const [studyQueue, setStudyQueue] = useState(null);
-  const [states, setStates] = useState({});
+  const [progress, setProgress] = useState(() => load());
+  const states = progress.states;
+  useEffect(() => { save(progress); }, [progress]);
   const deck = openId ? findDeck(openId) : null;
 
   function startStudy(d) {
@@ -14,13 +17,13 @@ export default function App() {
   }
 
   function rate(card, grade) {
-    setStates(prev => ({ ...prev, [card.id]: review(prev[card.id], grade) }));
+    setProgress(prev => recordReview(prev, card.id, review(prev.states[card.id], grade)));
   }
 
   let content;
   if (studyQueue) content = <Study queue={studyQueue} states={states} onRate={rate} onExit={() => setStudyQueue(null)} />;
   else if (deck) content = <DeckView deck={deck} states={states} onStudy={() => startStudy(deck)} onBack={() => setOpenId(null)} />;
-  else content = <DeckList states={states} onOpen={setOpenId} />;
+  else content = <><Stats progress={progress} /><DeckList states={states} onOpen={setOpenId} /></>;
 
   return (
     <>
@@ -71,6 +74,19 @@ function DeckView({ deck, states, onStudy, onBack }) {
           </li>
         ))}
       </ul>
+    </section>
+  );
+}
+
+function Stats({ progress }) {
+  const s = stats(allCards(), progress.states, progress.days);
+  return (
+    <section className="stats" aria-label="Your progress">
+      <div><strong>{s.streak}</strong><span>day streak 🔥</span></div>
+      <div><strong>{s.today}</strong><span>reviewed today</span></div>
+      <div><strong>{s.fresh}</strong><span>new</span></div>
+      <div><strong>{s.learning}</strong><span>learning</span></div>
+      <div><strong>{s.mature}</strong><span>known well</span></div>
     </section>
   );
 }

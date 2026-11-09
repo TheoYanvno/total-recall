@@ -27,3 +27,7 @@ pre { background:#0b0918; color:#e9e6ff; border-radius:10px; padding:12px; overf
 kbd { font-size:.75rem; border:1px solid var(--line); border-radius:4px; padding:0 5px; margin-right:4px; color:var(--muted); }
 .small { font-size:.85rem; } .done { text-align:center; align-items:center; }
 @media (max-width:520px) { .grades { grid-template-columns:repeat(2,1fr); } }
+.stats { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin-bottom:22px; }
+.stats div { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px; display:flex; flex-direction:column; align-items:center; }
+.stats strong { font-size:1.5rem; } .stats span { color:var(--muted); font-size:.85rem; text-align:center; }
+@media (max-width:620px) { .stats { grid-template-columns:repeat(3,1fr); } }
