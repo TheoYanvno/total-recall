@@ -1,13 +1,28 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { GRADES, dueLabel } from '../lib/srs.js';
+import DeckIcon from './DeckIcon.jsx';
 
-const LABELS = { again: 'Again', hard: 'Hard', good: 'Good', easy: 'Easy' };
+const BUTTONS = {
+  again: { label: 'Again', sub: 'Forgot', icon: 'M3 12a9 9 0 1 0 3-6.7M3 4v5h5' },
+  hard: { label: 'Hard', sub: 'Barely', icon: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM8 15h8' },
+  good: { label: 'Good', sub: 'Got it', icon: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM8 12h8' },
+  easy: { label: 'Easy', sub: 'Knew it', icon: 'M4 12l5 5L20 6' },
+};
 
-// One study session: show the term, flip to see the answer, then rate it. Keyboard: Space flips,
-// 1-4 rate (Again, Hard, Good, Easy), Escape leaves.
-export default function Study({ queue, states, onRate, onExit }) {
+function Icon({ d, size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d={d} />
+    </svg>
+  );
+}
+
+// The study panel: pick a deck, flip each card, rate it. Keyboard: Space or Enter flips, 1-4 rate
+// (Again, Hard, Good, Easy), F toggles full screen.
+export default function Study({ deck, decks, queue, states, onRate, onPickDeck, onRestart, title }) {
   const [index, setIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
+  const panel = useRef(null);
   const card = queue[index];
 
   function rate(grade) {
@@ -17,54 +32,79 @@ export default function Study({ queue, states, onRate, onExit }) {
     setIndex(i => i + 1);
   }
 
+  function fullscreen() {
+    if (document.fullscreenElement) document.exitFullscreen?.();
+    else panel.current?.requestFullscreen?.().catch(() => {});
+  }
+
   useEffect(() => {
     function onKey(e) {
-      if (e.target.closest && e.target.closest('input, textarea')) return;
-      if (e.key === 'Escape') onExit();
-      else if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); setFlipped(f => !f); }
-      else if (['1', '2', '3', '4'].includes(e.key)) rate(GRADES[Number(e.key) - 1]);
+      if (e.target.closest && e.target.closest('input, textarea, select')) return;
+      if (e.key === ' ' || e.key === 'Enter') {
+        if (e.target.closest && e.target.closest('button') && !e.target.closest('.flashcard')) return;
+        e.preventDefault(); if (card) setFlipped(f => !f);
+      } else if (['1', '2', '3', '4'].includes(e.key)) rate(GRADES[Number(e.key) - 1]);
+      else if (e.key === 'f' || e.key === 'F') fullscreen();
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   });
 
-  if (!card) {
-    return (
-      <section className="study done" aria-live="polite">
-        <h2>All caught up 🎉</h2>
-        <p className="muted">You reviewed {queue.length} card{queue.length === 1 ? '' : 's'}. Come back when more are due.</p>
-        <button className="primary" onClick={onExit}>Back to decks</button>
-      </section>
-    );
-  }
-
+  const total = queue.length;
+  const done = Math.min(index, total);
   return (
-    <section className="study" aria-labelledby="study-term">
+    <section className="panel study" ref={panel} aria-labelledby="study-heading">
+      <h2 id="study-heading" className="sr-only">{title || 'Study'}</h2>
       <div className="study-top">
-        <button onClick={onExit}>← Stop</button>
-        <span className="muted">{index + 1} of {queue.length}</span>
-      </div>
-      <button className={`flashcard${flipped ? ' flipped' : ''}`} onClick={() => setFlipped(f => !f)} aria-label={flipped ? 'Hide the answer' : 'Show the answer'}>
-        <span id="study-term" className="term">{card.term}</span>
-        {flipped ? (
-          <span className="answer" aria-live="polite">
-            <span>{card.back}</span>
-            {card.example && <pre><code>{card.example}</code></pre>}
-          </span>
-        ) : (
-          <span className="muted hint">Press Space or tap to flip</span>
-        )}
-      </button>
-      {flipped && (
-        <div className="grades" role="group" aria-label="How well did you know it?">
-          {GRADES.map((g, i) => (
-            <button key={g} className={`grade ${g}`} onClick={() => rate(g)}>
-              <kbd>{i + 1}</kbd> {LABELS[g]}
-            </button>
-          ))}
+        <label className="deck-select">
+          {deck && <DeckIcon deck={deck} size={26} />}
+          <span className="sr-only">Deck</span>
+          <select value={deck ? deck.id : ''} onChange={e => onPickDeck(e.target.value)}>
+            {!deck && <option value="">{title}</option>}
+            {decks.map(d => <option key={d.id} value={d.id}>{d.title}</option>)}
+          </select>
+        </label>
+        <div className="session-progress" aria-label={`${done} of ${total} cards done`}>
+          <span>{Math.min(index + 1, total)} / {total}</span>
+          <span className="bar"><span style={{ width: total ? `${(done / total) * 100}%` : '0%' }} /></span>
         </div>
+        <button className="icon-btn" onClick={fullscreen} aria-label="Full screen (F)" title="Full screen (F)">
+          <Icon d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
+        </button>
+      </div>
+
+      {!card ? (
+        <div className="flashcard done-card" aria-live="polite">
+          <span className="pill">{total ? 'Session done' : 'Nothing due'}</span>
+          <h3>{total ? 'All caught up 🎉' : 'No cards to study here right now'}</h3>
+          <p className="muted">{total ? `You reviewed ${total} card${total === 1 ? '' : 's'}. Cards come back when they're due.` : 'Pick another deck or study mode.'}</p>
+          {total > 0 && <button className="primary" onClick={onRestart}>Check for more</button>}
+        </div>
+      ) : (
+        <button className={`flashcard${flipped ? ' flipped' : ''}`} onClick={() => setFlipped(f => !f)} aria-label={flipped ? `Hide the answer for ${card.term}` : `Show the answer for ${card.term}`}>
+          <span className="pill">{flipped ? 'Definition' : 'Term'}</span>
+          <span className={`term${flipped ? ' small-term' : ''}`}><span className="grad">{card.term}</span></span>
+          {flipped ? (
+            <span className="answer" aria-live="polite">
+              <span className="divider" />
+              <span>{card.back}</span>
+              {card.example && <pre><code>{card.example}</code></pre>}
+            </span>
+          ) : (
+            <span className="muted hint">Press Space or tap to flip</span>
+          )}
+        </button>
       )}
-      <p className="muted small">Last seen: {states[card.id] ? dueLabel(states[card.id]) : 'new card'}</p>
+
+      <div className="grades" role="group" aria-label="How well did you know it?">
+        {GRADES.map((g, i) => (
+          <button key={g} className={`grade ${g}`} disabled={!card || !flipped} onClick={() => rate(g)}>
+            <Icon d={BUTTONS[g].icon} />
+            <span><strong>{BUTTONS[g].label}</strong><small>{BUTTONS[g].sub} · <kbd>{i + 1}</kbd></small></span>
+          </button>
+        ))}
+      </div>
+      {card && <p className="muted small">Last seen: {states[card.id] ? dueLabel(states[card.id]) : 'new card'}</p>}
     </section>
   );
 }

@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
 import { DECKS, findDeck, allCards } from './lib/decks.js';
 import { load, save, recordReview, stats } from './lib/progress.js';
-import { review, dueQueue, dueLabel } from './lib/srs.js';
+import { review, dueQueue } from './lib/srs.js';
+import { importDeck } from './lib/share.js';
 import Study from './components/Study.jsx';
-import { exportDeck, importDeck } from './lib/share.js';
+import { Banner, Sidebar } from './components/Shell.jsx';
+import { DeckList, DeckView, countDue } from './components/Decks.jsx';
+import DeckPicker from './components/DeckPicker.jsx';
 
 const DECKS_KEY = 'total-recall:decks';
 function loadCustom() {
@@ -14,8 +17,8 @@ function loadCustom() {
 }
 
 export default function App() {
+  const [page, setPage] = useState('study');
   const [openId, setOpenId] = useState(null);
-  const [studyQueue, setStudyQueue] = useState(null);
   const [progress, setProgress] = useState(() => load());
   const states = progress.states;
   useEffect(() => { save(progress); }, [progress]);
@@ -24,97 +27,52 @@ export default function App() {
   const decks = [...DECKS, ...custom];
   const deck = openId ? findDeck(openId, decks) : null;
 
-  function addDeck(d) { setCustom(list => [...list, d]); }
-  function removeDeck(id) { setCustom(list => list.filter(d => d.id !== id)); setOpenId(null); }
+  // A study session is a snapshot of the cards to go through, taken when it starts.
+  const [session, setSession] = useState(() => {
+    const first = decks.find(d => countDue(d, states) > 0) || decks[0];
+    return { deckId: first.id, queue: dueQueue(first.cards, states), n: 0 };
+  });
+  const studyDeck = findDeck(session.deckId, decks) || decks[0];
 
-  function startStudy(d) {
-    setStudyQueue(dueQueue(d.cards, states));
+  function startSession(deckId) {
+    const d = findDeck(deckId, decks) || decks[0];
+    setSession(s => ({ deckId: d.id, queue: dueQueue(d.cards, progress.states), n: s.n + 1 }));
+    setPage('study');
+    setOpenId(null);
   }
-
+  function addDeck(d) { setCustom(list => [...list, d]); }
+  function removeDeck(id) {
+    setCustom(list => list.filter(d => d.id !== id));
+    setOpenId(null);
+    if (session.deckId === id) startSession(DECKS[0].id);
+  }
   function rate(card, grade) {
     setProgress(prev => recordReview(prev, card.id, review(prev.states[card.id], grade)));
   }
+  function go(id) { setPage(id); setOpenId(null); }
 
   let content;
-  if (studyQueue) content = <Study queue={studyQueue} states={states} onRate={rate} onExit={() => setStudyQueue(null)} />;
-  else if (deck) content = <DeckView deck={deck} states={states} onStudy={() => startStudy(deck)} onBack={() => setOpenId(null)} onRemove={removeDeck} />;
-  else content = <><Stats progress={progress} /><DeckList decks={decks} states={states} onOpen={setOpenId} onImport={addDeck} /></>;
-
-  return (
-    <>
-      <header>
-        <h1>🧠 TotalRecall</h1>
-        <span className="muted">Flashcards for programming terms</span>
-      </header>
-      <main>{content}</main>
-    </>
-  );
-}
-
-function countDue(deck, states) {
-  return dueQueue(deck.cards, states, Date.now(), Infinity).length;
-}
-
-function DeckList({ decks, states, onOpen, onImport }) {
-  const [message, setMessage] = useState('');
-  async function pick(e) {
-    const file = e.target.files[0];
-    e.target.value = '';
-    if (!file) return;
-    if (file.size > 1_000_000) return setMessage('That file is over 1 MB, too big for a deck.');
-    const { deck, error } = importDeck(await file.text(), new Set(decks.map(d => d.id)));
-    if (error) return setMessage(error);
-    onImport(deck);
-    setMessage(`Imported "${deck.title}" with ${deck.cards.length} cards.`);
-  }
-  return (
-    <section aria-labelledby="decks-title">
-      <h2 id="decks-title">Decks</h2>
-      <p className="muted">Each deck follows a CodeForge lesson. Pick one to study its cards.</p>
-      <div className="grid">
-        {decks.map(deck => (
-          <button key={deck.id} className="deck" onClick={() => onOpen(deck.id)}>
-            <h2>{deck.title}</h2>
-            <span className="muted">{deck.blurb}</span>
-            <span className="badge">{deck.cards.length} cards · {countDue(deck, states)} to study{deck.custom ? ' · imported' : ''}</span>
-          </button>
-        ))}
+  if (page === 'study') {
+    content = (
+      <div className="study-grid">
+        <Study key={session.n} deck={studyDeck} decks={decks} queue={session.queue} states={states}
+          onRate={rate} onPickDeck={startSession} onRestart={() => startSession(studyDeck.id)} />
+        <DeckPicker decks={decks} states={states} current={studyDeck.id} onPick={startSession} />
       </div>
-      <p className="importer">
-        <label className="filebtn">Import a deck (JSON)<input type="file" accept="application/json,.json" onChange={pick} /></label>
-        <span className="muted" role="status">{message}</span>
-      </p>
-    </section>
-  );
-}
+    );
+  } else if (page === 'progress') content = <Stats progress={progress} />;
+  else if (page === 'settings' || page === 'about') content = <section className="panel"><h2>{page === 'about' ? 'About' : 'Settings'}</h2><p className="muted">Coming soon.</p></section>;
+  else if (deck) content = <DeckView deck={deck} states={states} onStudy={() => startSession(deck.id)} onBack={() => setOpenId(null)} onRemove={removeDeck} />;
+  else content = <DeckList decks={decks} states={states} onOpen={setOpenId} onImport={addDeck} />;
 
-function DeckView({ deck, states, onStudy, onBack, onRemove }) {
-  function download() {
-    const url = URL.createObjectURL(new Blob([exportDeck(deck)], { type: 'application/json' }));
-    const a = Object.assign(document.createElement('a'), { href: url, download: `${deck.id}.json` });
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
   return (
-    <section aria-labelledby="deck-title">
-      <button onClick={onBack}>← All decks</button>
-      <h2 id="deck-title">{deck.title}</h2>
-      <p className="muted">{deck.blurb}</p>
-      <div className="row">
-        <button className="primary" onClick={onStudy}>Study {countDue(deck, states)} cards</button>
-        <button onClick={download}>Export as JSON</button>
-        {deck.custom && <button onClick={() => onRemove(deck.id)}>Remove this deck</button>}
+    <div className="app">
+      <Banner decks={decks} />
+      <div className="layout">
+        <Sidebar page={page} onPage={go} />
+        <main>{content}</main>
       </div>
-      <ul className="cardlist">
-        {deck.cards.map(card => (
-          <li key={card.id}>
-            <strong>{card.term}</strong> <span className="badge">{states[card.id] ? dueLabel(states[card.id]) : 'new'}</span>
-            <div>{card.back}</div>
-            {card.example && <pre><code>{card.example}</code></pre>}
-          </li>
-        ))}
-      </ul>
-    </section>
+    </div>
   );
 }
 
