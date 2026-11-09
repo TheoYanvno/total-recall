@@ -1,0 +1,21 @@
+{
+  "name": "total-recall",
+  "version": "0.1.0",
+  "private": true,
+  "description": "React flashcards for studying programming terms, with spaced repetition.",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "start": "node build.mjs --serve",
+    "test": "node --test \"test/*.test.js\""
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  },
+  "author": "Anthony Evo",
+  "license": "MIT"
+}
